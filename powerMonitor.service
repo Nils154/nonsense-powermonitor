@@ -1,0 +1,12 @@
+[Unit]
+Description=powerMonitor
+After=multi-user.target
+[Service]
+User=pi
+Group=pi
+Type=simple
+Restart=always
+WorkingDirectory=/home/pi/VSCode-Python/powerMonitor
+ExecStart=/usr/bin/python3 /home/pi/VSCode-Python/powerMonitor/powerMonitor.py
+[Install]
+WantedBy=multi-user.target
