@@ -1,33 +1,49 @@
-Now that Sense no longer sells the orange powermonitor, and the green powermonitor from Scheiderhome doesn't work with homeassistant, I decided to try my own.
-This app uses a once-per-second power measurement from my enphase setup. (Other hardware can easily be added in powerMonitor.py)
-The power has to change by 20W to trigger and event. Depending on your setup, maybe this needs to be higher.
-TVs and Computers use very unpredictable amounts of power and look like noise.
-LED use very little power and blend in with the TVs and Computers. No hope in detecting those.
-(It could be a future feature to add MQTT inputs from smartplugs through homeassistant)
-After an event is triggered, 20 seconds is recorded and saved as an event.
-The event is compared to 'devices' stored in the database.
-If a match is found, MQTT sends out a 'ON' message is the average net power during the 20 sec > 0, and 'OFF' if <=0.
-Also a avg power messages is sent out for the device
-If the device has a stored off-time, an OFF message is queued to be sent later, along with power back to 0.
-Baseline power is tracked as the minimum in the last hour and stored for 24 hours.
-Baseline power is sent over MQTT every hour as the minimum power of the last 24 hours.
-Unknown power is sent over MQTT every minute.
+# nonsense-powermonitor
 
-The web interface using python flask allows for analysis of saved events.
-I recommend you run the code for 24 hours or longer.
-Then you can do an analysis from the web interface.
-It will look for similar looking events and group them in clusters.
-Then you can name each cluster as a device. Multiple clusters can have the same device name.
-For example, my EV charging turning on doesn't always look the same, so I have multiple devices all named 'ev'.
-The off event should also have the same device name.
-Refrigerators are pretty easy to recognize when they turn on, but not when they turn off.
-I have an on device for them with a 15min off delay, so the system send an off message after 15 minutues.
+Now that Sense no longer sells the orange powermonitor, and the green powermonitor from Schneider Home doesn't work with Home Assistant, I decided to try my own.
 
-Now that you are up and running with a number of devices, you can go tweak the 'max distance'.
-Smaller Max Distance will require events to be more similar, so you can distinguish for example between two refrigerators.
-It appears almost everything is a 1400W heater, not sure if I can distinguish my coffeemaker, toaster, toaster oven and teapot.
+This app uses a once-per-second power measurement from my Enphase setup. Other hardware can easily be added in `powerMonitor.py`.
 
-You can also browse through the past events, or type in the time of a particular event, then change the max distance until 
-you have narrowed the event down to the group of matching events that identify your device and you can save the device.
+## Overview
 
-Of course you can also delete devices.
+- The power has to change by 20 W to trigger an event. Depending on your setup, you might need to increase this threshold.
+- TVs and computers use very unpredictable amounts of power and look like noise.
+- LEDs use very little power and often blend in with TVs and computers, so they are difficult to detect.
+- (A possible future feature: add MQTT inputs from smart plugs through Home Assistant.)
+
+## Event detection and MQTT
+
+- After an event is triggered, 20 seconds of data are recorded and saved as an event.
+- The event is compared to "devices" stored in the database.
+- If a match is found, MQTT sends an `ON` message if the average net power during the 20 s > 0, and `OFF` if <= 0.
+- An average power message is also sent for the device.
+- If the device has a stored off-time, an `OFF` message is queued to be sent later (along with power back to 0).
+
+## Baseline and unknown power
+
+- Baseline power is tracked as the minimum in the last hour and stored for 24 hours.
+- Baseline power is sent over MQTT every hour as the minimum power of the last 24 hours.
+- Unknown power (power that doesn't match a known device) is sent over MQTT every minute.
+
+## Web interface (Flask)
+
+The web interface allows for analysis of saved events. I recommend you run the code for 24 hours or longer before analyzing.
+
+- The analysis looks for visually similar events and groups them into clusters.
+- You can name each cluster as a device. Multiple clusters can share the same device name.
+  - For example, my EV charging turning on doesn't always look the same, so I have multiple clusters all named `ev`.
+- The off event should also have the same device name.
+  - Refrigerators are usually easy to recognize when they turn on but not when they turn off. For those I use an "on" device with a 15-minute off delay so the system sends an off message after 15 minutes.
+
+## Tuning
+
+- Once you have a number of devices, you can tweak the `max distance`.
+  - A smaller `max distance` requires events to be more similar, which helps distinguish similar devices (for example, two refrigerators).
+  - Many devices look similar (e.g., many are ~1400 W heaters), so tuning is necessary to separate similar loads.
+- You can browse past events or jump to a specific timestamp, then adjust `max distance` until you isolate the group of matching events that identify your device, and then save that device group.
+- You can also delete devices if needed.
+
+## Notes
+
+- Other hardware sources of power data can be integrated by editing `powerMonitor.py`.
+- Running for at least 24 hours gives the analyzer enough events to form clusters and produce meaningful results.
