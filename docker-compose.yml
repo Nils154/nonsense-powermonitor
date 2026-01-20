@@ -9,13 +9,18 @@ services:
     volumes:
       # Mount data directory to persist database
       - ./data:/srv/docker/powermonitor/data
+    env_file:
+      - .env
     environment:
       - PYTHONUNBUFFERED=1
-      #- MQTT_HOST='mqtthost.local'
+      # Uncomment and set these values, or use a .env file
+      #- MQTT_HOST=mqtthost.local
       #- MQTT_PORT=1883
-      #- MQTT_USER='you'
-      #- MQTT_PASSWORD='secret'
-      #- ENPHASE_EMAIL='you@gmail.com'
-      #- ENPHASE_PASSOWRD='alsosecret'
-      #- ENVOY_IP='192.168.1.36'
-      #- ENVOY_SERIAL="12345678910"
+      #- MQTT_USER=you
+      #- MQTT_PASSWORD=secret
+      #- ENPHASE_EMAIL=you@gmail.com
+      #- ENPHASE_PASSWORD=alsosecret
+      #- ENVOY_IP=192.168.1.36
+      #- ENVOY_SERIAL=12345678910
+      #- GRID_EID=123456789
+      #- SOLAR_EID=1234567890
