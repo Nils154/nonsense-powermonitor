@@ -26,8 +26,8 @@ ENPHASE_PASSWORD="your_password"
 ENVOY_IP="your_envoy_ip"
 ENVOY_SERIAL="your_envoy_serial"
 
-GRID_EID=704643584
-SOLAR_EID=704643328
+GRID_EID=123456789 #your electronic ID for your grid power meter. It will show up in the log if you run the code
+SOLAR_EID=1234567890 #if you have solar behind the grid meter, add the electronic ID for it too. (also listed in log)
 ```
 
 ## Building and Running
