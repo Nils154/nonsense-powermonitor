@@ -63,7 +63,7 @@ The following variables are **required** for the container to start:
 - `ENPHASE_PASSWORD` - Your Enphase account password
 - `ENVOY_IP` - Local IP address of your Envoy device
 - `ENVOY_SERIAL` - Envoy serial number (can be found in envoy app->menu->system->devices->gateway->SN)
-- `MQTT_HOST` - MQTT broker hostname (required if using MQTT)
+- `MQTT_HOST` - MQTT broker hostname or IP address (required if using MQTT). **Note: Local DNS resolution (e.g., `.local` hostnames) does not work in Docker containers. Use an IP address instead of a hostname if you encounter DNS resolution errors.**
 
 ### Optional Variables
 
@@ -125,6 +125,18 @@ The following directories are mounted as volumes to persist data:
 - `./plots` - Contains generated plot images
 
 ## Troubleshooting
+
+### DNS Resolution Issues
+
+**⚠️ Local DNS resolution does not work in Docker containers.**
+
+If you encounter `socket.gaierror: [Errno -2] Name or service not known` errors, this is likely because:
+- You're using a hostname (like `mqtthost.local`) that cannot be resolved inside the container
+- Local DNS (mDNS/Bonjour) services are not available to Docker containers
+
+**Solution:** Use IP addresses instead of hostnames for `MQTT_HOST` and `ENVOY_IP`:
+- Instead of: `MQTT_HOST=mqtthost.local`
+- Use: `MQTT_HOST=192.168.1.100` (replace with actual IP address)
 
 ### Check if both processes are running
 ```bash

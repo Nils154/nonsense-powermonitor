@@ -222,6 +222,9 @@ class PowerEventAnalyzer:
             scaled_events = self.scaled_events
             events = self.events
             print(f'Using all {len(self.events)} events for clustering')
+        if len(scaled_events) < 10:
+            logger.error("Not enough events for clustering")
+            return None
         self.n_clusters = self._determine_optimal_clusters(unlabeled=unlabeled)
         print('Performing clustering with ', self.n_clusters, ' clusters')
         """Perform K-means clustering on power data"""
@@ -468,7 +471,7 @@ class PowerEventAnalyzer:
         analysis_data = self.db.load_analysis()
         if analysis_data is None:
             logger.error("❌ No devices found in database.")
-            return False
+            return None
         
         # Extract data
         self.device_keys = np.array(analysis_data['device_key'], dtype=int)
@@ -551,7 +554,9 @@ class PowerEventAnalyzer:
             logger.info('new analysis found')
             updated_topics = self.load_results_from_database()
             hassmqtt.reconfig(updated_topics)
-        
+        if self.n_devices == 0:
+            logger.error("No devices found, cannot match event")
+            return None, None
         scaled_power_data = myscaler(this_event_power_data.reshape(1, -1))  # make it 2D, 1 row, infer column
         distance = cdist(scaled_power_data, self.scaled_device_profiles, metric='euclidean')
         min_distance = np.min(distance)   

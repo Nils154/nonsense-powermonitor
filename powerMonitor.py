@@ -254,10 +254,6 @@ class EnphaseClient:
                 active_power = meter.get("activePower", "N/A")
                 timestamp = meter.get("timestamp", "N/A")
                 logger.info(f"  Meter {i+1}: {comment} eid={eid}, activePower={active_power}W, timestamp={timestamp}")
-                # Log all available keys in the meter data
-                all_keys = list(meter.keys())
-                logger.info(f"    Available fields: {', '.join(all_keys)}")
-            
             return data
         except requests.HTTPError as e:
             # Token might be expired, try to refresh
@@ -282,10 +278,6 @@ class EnphaseClient:
                         active_power = meter.get("activePower", "N/A")
                         timestamp = meter.get("timestamp", "N/A")
                         logger.info(f"  Meter {i+1}: eid={eid}, activePower={active_power}W, timestamp={timestamp}")
-                        # Log all available keys in the meter data
-                        all_keys = list(meter.keys())
-                        logger.info(f"    Available fields: {', '.join(all_keys)}")
-                    
                     return data
                 except Exception as retry_error:
                     logger.error(f"Error after token refresh: {retry_error}")
@@ -386,7 +378,11 @@ class PowerTracking:
             self.current_minutes = minutes
             for _device, (_scheduled_time, dev_avg_power) in currently_on.items():
                 unknown_power -= dev_avg_power
-            unknown_power = unknown_power-self.baseline_power 
+            if self.baseline_power is not None:
+                unknown_power = unknown_power-self.baseline_power 
+            else:
+                logger.error("Baseline power is None, cannot calculate unknown power")
+                unknown_power = 0
             if unknown_power < 0:
                 unknown_power = 0
             self.hassmqtt.update("unknown_power", str(unknown_power), False)

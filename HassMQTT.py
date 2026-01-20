@@ -66,10 +66,11 @@ class HassMQTT:
         self.mqttc.connect(MQTT_HOST, port=MQTT_PORT, keepalive=60, bind_address="")
         logger.info('MQTT Config completed. Starting mqtt')
         self.mqttc.loop_start()
-        for topic in self.topics:
-            self.mqttc.will_set(self.topics[topic]["config_topic"], payload=None, qos=0, retain=False)
-            config = json.dumps({k: self.topics[topic][k] for k in self.topics[topic].keys() if k != "config_topic"})
-            self.send(self.topics[topic]["config_topic"], config, True)
+        if self.topics is not None and len(self.topics) > 0:
+            for topic in self.topics:
+                self.mqttc.will_set(self.topics[topic]["config_topic"], payload=None, qos=0, retain=False)
+                config = json.dumps({k: self.topics[topic][k] for k in self.topics[topic].keys() if k != "config_topic"})
+                self.send(self.topics[topic]["config_topic"], config, True)
         logger.info('HassMQTT config completed')
 
     def _on_connect_wrapper(self, client, userdata, flags, rc, *args, **kwargs):
@@ -139,8 +140,11 @@ class HassMQTT:
             topic_dict: Dictionary containing topic configuration including config_topic
         """
         # Add topic to self.topics
-        self.topics[topic_name] = topic_dict
-        
+        if self.topics is not None:
+            self.topics[topic_name] = topic_dict
+        else:
+            self.topics = {}
+            self.topics[topic_name] = topic_dict
         # Send configuration
         config = json.dumps({k: topic_dict[k] for k in topic_dict.keys() if k != "config_topic"})
         self.send(topic_dict["config_topic"], config, True)

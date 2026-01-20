@@ -8,7 +8,9 @@ services:
       - "8888:8888"
     volumes:
       # Mount data directory to persist database
-      - ./data:/srv/docker/powermonitor/data
+      - ./data:/srv/docker/nonsense-powermonitor/data
+    dns_search:
+      - local
     env_file:
       - .env
     environment:
