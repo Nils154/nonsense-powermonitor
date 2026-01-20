@@ -20,10 +20,30 @@ except:
     _PAHO_VERSION_2 = False
 
 load_dotenv()
-MQTT_HOST=os.getenv("MQTT_HOST")
-MQTT_PORT=os.getenv("MQTT_PORT")
-MQTT_USER=os.getenv("MQTT_USER")
-MQTT_PASSWORD=os.getenv("MQTT_PASSWORD")
+
+# MQTT configuration - required if MQTT is used
+MQTT_HOST = os.getenv("MQTT_HOST")
+MQTT_PORT_STR = os.getenv("MQTT_PORT")
+MQTT_USER = os.getenv("MQTT_USER")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
+
+# Validate MQTT_HOST (required for connection)
+if MQTT_HOST is None:
+    raise ValueError("MQTT_HOST environment variable is required but not set. Please set it in docker-compose.yml or a .env file, or disable MQTT functionality.")
+
+# MQTT_PORT is optional, default to 1883 if not set
+if MQTT_PORT_STR is None:
+    MQTT_PORT = 1883
+else:
+    try:
+        MQTT_PORT = int(MQTT_PORT_STR)
+    except ValueError as e:
+        raise ValueError(f"MQTT_PORT must be a valid integer. Got: '{MQTT_PORT_STR}'. Error: {e}")
+
+# MQTT_USER and MQTT_PASSWORD are optional (can be None for unauthenticated MQTT)
+# But we'll validate they're set together if one is provided
+if (MQTT_USER is None) != (MQTT_PASSWORD is None):
+    raise ValueError("Both MQTT_USER and MQTT_PASSWORD must be set together, or both left unset for unauthenticated MQTT.")
 
 
 class HassMQTT:
@@ -43,7 +63,7 @@ class HassMQTT:
         self.mqttc.on_connect = self._on_connect_wrapper
         self.mqttc.on_disconnect = self._on_disconnect_wrapper
         self.mqttc.on_message = self.on_message
-        self.mqttc.connect(MQTT_HOST, port=1883, keepalive=60, bind_address="")
+        self.mqttc.connect(MQTT_HOST, port=MQTT_PORT, keepalive=60, bind_address="")
         logger.info('MQTT Config completed. Starting mqtt')
         self.mqttc.loop_start()
         for topic in self.topics:

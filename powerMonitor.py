@@ -26,12 +26,28 @@ from database import PowerEventDatabase
 logger = logging.getLogger(__name__)
 
 load_dotenv()
+
+# Required environment variables with validation
 ENPHASE_EMAIL = os.getenv("ENPHASE_EMAIL")
+if ENPHASE_EMAIL is None:
+    raise ValueError("ENPHASE_EMAIL environment variable is required but not set. Please set it in docker-compose.yml or a .env file.")
+
 ENPHASE_PASSWORD = os.getenv("ENPHASE_PASSWORD")
-ENVOY_IP = os.getenv("ENVOY_IP")   # Local IP of your Envoy
-ENVOY_SERIAL = os.getenv("ENVOY_SERIAL") # look up in the englighten apps
-GRID_EID = int(os.getenv("GRID_EID"))  # Grid/consumption meter eid
-SOLAR_EID = int(os.getenv("SOLAR_EID"))  # Solar meter eid
+if ENPHASE_PASSWORD is None:
+    raise ValueError("ENPHASE_PASSWORD environment variable is required but not set. Please set it in docker-compose.yml or a .env file.")
+
+ENVOY_IP = os.getenv("ENVOY_IP")
+if ENVOY_IP is None:
+    raise ValueError("ENVOY_IP environment variable is required but not set. Please set it in docker-compose.yml or a .env file.")
+
+ENVOY_SERIAL = os.getenv("ENVOY_SERIAL")
+if ENVOY_SERIAL is None:
+    raise ValueError("ENVOY_SERIAL environment variable is required but not set. Please set it in docker-compose.yml or a .env file.")
+
+# GRID_EID is not provided, choose the first meter found
+GRID_EID = os.getenv("GRID_EID")
+# SOLAR_EID is only needed if you have solar behind the grid meter
+SOLAR_EID = os.getenv("SOLAR_EID")
 
 TRIGGER = 20 # 20W change will trigger an event, 5 looks like noise all day long, 10W also looks like too much noise
 
@@ -122,8 +138,14 @@ class EnphaseClient:
             # Filter only consumption meters
             #  "eid": GRID_EID is consumption
             #  "eid": SOLAR_EID is solar
-            consumption_meter = [m for m in data if m.get("eid") == self.grid_eid]
-            solar_meter = [m for m in data if m.get("eid") == self.solar_eid]
+            if self.grid_eid is not None:
+                consumption_meter = [m for m in data if m.get("eid") == int(self.grid_eid)]
+            else:
+                consumption_meter = None
+            if self.solar_eid is not None:
+                solar_meter = [m for m in data if m.get("eid") == int(self.solar_eid)]
+            else:
+                solar_meter = None
             
             if not consumption_meter:
                 logger.error(f"Consumption meter (eid: {self.grid_eid}) not found in data")
@@ -155,8 +177,14 @@ class EnphaseClient:
                     )
                     r.raise_for_status()
                     data = r.json()
-                    consumption_meter = [m for m in data if m.get("eid") == GRID_EID]
-                    solar_meter = [m for m in data if m.get("eid") == SOLAR_EID]
+                    if self.grid_eid is not None:
+                        consumption_meter = [m for m in data if m.get("eid") == int(self.grid_eid)]
+                    else:
+                        consumption_meter = None
+                    if self.solar_eid is not None:
+                        solar_meter = [m for m in data if m.get("eid") == int(self.solar_eid)]
+                    else:
+                        solar_meter = None
                     if not consumption_meter:
                         logger.error("Consumption meter not found after token refresh")
                         return None
@@ -170,6 +198,7 @@ class EnphaseClient:
                         local_tz = datetime.now().astimezone().tzinfo
                         dt = dt.replace(tzinfo=local_tz)
                     return dt, grid_power + solar_power
+
                 except Exception as retry_error:
                     logger.error(f"Error after token refresh: {retry_error}")
                     return None

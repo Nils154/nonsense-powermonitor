@@ -962,7 +962,8 @@ class PowerEventAnalyzer:
         
         # Build rows
         for s in summary:
-            row = f"{s['cluster_id']:<{col_widths['cluster_id']}}  {s['count']:<{col_widths['count']}}  {s['max_distance']:.2f}"
+            max_dist_formatted = f"{s['max_distance']:.2f}"
+            row = f"{s['cluster_id']:<{col_widths['cluster_id']}}  {s['count']:<{col_widths['count']}}  {max_dist_formatted:<{col_widths['max_distance']}}"
             lines.append(row)
         
         return "\n".join(lines)
