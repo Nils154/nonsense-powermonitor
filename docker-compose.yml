@@ -1,7 +1,7 @@
 services:
-  powermonitor:
+  nonsense-powermonitor:
     build: .
-    container_name: powermonitor
+    container_name: nonsense-powermonitor
     restart: unless-stopped
     ports:
       - "8888:8888"

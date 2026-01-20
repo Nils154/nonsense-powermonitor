@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 # Set working directory
-WORKDIR /srv/docker/powermonitor
+WORKDIR /srv/docker/nonsense-powermonitor
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
