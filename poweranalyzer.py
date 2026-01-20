@@ -1649,14 +1649,14 @@ def interactive_cluster_labeling(analyzer, db=None):
 
 
 if __name__ == "__main__":
-    # Configure logging - only show messages from powerMonitor and powerAnalyzerv4
+    # Configure logging - only show messages from powerMonitor and poweranalyzer
     logging.basicConfig(
         level=logging.WARNING,  # Suppress INFO/DEBUG from third-party modules
         format="%(message)s"
     )
     # Set specific loggers to INFO level
     logging.getLogger('powerMonitor').setLevel(logging.INFO)
-    logging.getLogger('powerAnalyzerv4').setLevel(logging.INFO)
+    logging.getLogger('poweranalyzer').setLevel(logging.INFO)
     # Also set for when run as script (__main__)
     if __name__ == '__main__':
         logging.getLogger('__main__').setLevel(logging.INFO)

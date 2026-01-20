@@ -18,7 +18,7 @@ import logging
 from dotenv import load_dotenv
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning) # type: ignore
-import powerAnalyzerv5 as pa
+import poweranalyzer as pa
 from HassMQTT import HassMQTT
 from database import PowerEventDatabase
 
@@ -382,7 +382,7 @@ class PowerTracking:
      
              
 def main():
-    # Configure logging - only show messages from powerMonitor and powerAnalyzerv4
+    # Configure logging - only show messages from powerMonitor and poweranalyzer
     # DEBUG, INFO, WARNING, ERROR, CRITICAL
     logging.basicConfig(
         level=logging.WARNING,  # Suppress INFO/DEBUG from third-party modules
@@ -391,7 +391,7 @@ def main():
     )
     # Set specific loggers to INFO level
     logging.getLogger('powerMonitor').setLevel(logging.DEBUG)
-    logging.getLogger('powerAnalyzerv4').setLevel(logging.DEBUG)
+    logging.getLogger('poweranalyzer').setLevel(logging.DEBUG)
     # Also set for when run as script (__main__)
     if __name__ == '__main__':
         logging.getLogger('__main__').setLevel(logging.DEBUG)

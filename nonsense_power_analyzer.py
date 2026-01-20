@@ -4,7 +4,7 @@
 Nonsense Power Analyzer - Web Application
 A web-based interface for power event analysis, clustering, and device identification.
 
-Based on powerAnalyzerv5.py
+Based on poweranalyzer.py
 """
 
 from flask import Flask, render_template, request, jsonify
@@ -16,7 +16,7 @@ import logging
 import base64
 import io
 from dateutil import parser
-from powerAnalyzerv5 import PowerEventAnalyzer, myscaler
+from poweranalyzer import PowerEventAnalyzer, myscaler
 from database import PowerEventDatabase
 from scipy.spatial.distance import cdist
 
@@ -712,7 +712,7 @@ def api_get_device_plots():
         
         # Find all events matching this device
         from scipy.spatial.distance import cdist
-        from powerAnalyzerv5 import myscaler
+        from poweranalyzer import myscaler
         
         device_profile_scaled = myscaler(device_profile.reshape(1, -1))
         all_events_scaled = myscaler(analyzer.events)
