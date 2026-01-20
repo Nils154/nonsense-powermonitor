@@ -16,13 +16,11 @@ after creating and removing devices, suggest you use mqtt-explorer.com to clean 
 
 """
 
-import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans    #pip install scikit-learn
 from scipy.spatial.distance import cdist
 from datetime import datetime, timedelta
-import pickle
 import os
 import logging
 from database import PowerEventDatabase
@@ -946,7 +944,28 @@ class PowerEventAnalyzer:
                 'count': count,
                 'max_distance': max_distance,
             })
-        return pd.DataFrame(summary)
+        
+        # Format as a table string instead of DataFrame
+        if not summary:
+            return "No clusters found."
+        
+        # Calculate column widths
+        col_widths = {
+            'cluster_id': max(len('cluster_id'), max(len(str(s['cluster_id'])) for s in summary)),
+            'count': max(len('count'), max(len(str(s['count'])) for s in summary)),
+            'max_distance': max(len('max_distance'), max(len(f"{s['max_distance']:.2f}") for s in summary))
+        }
+        
+        # Build header
+        header = f"{'cluster_id':<{col_widths['cluster_id']}}  {'count':<{col_widths['count']}}  {'max_distance':<{col_widths['max_distance']}}"
+        lines = [header, "-" * len(header)]
+        
+        # Build rows
+        for s in summary:
+            row = f"{s['cluster_id']:<{col_widths['cluster_id']}}  {s['count']:<{col_widths['count']}}  {s['max_distance']:.2f}"
+            lines.append(row)
+        
+        return "\n".join(lines)
     
     def save_window_position(self, fig, window_name):
         """Save the current window position for a figure"""

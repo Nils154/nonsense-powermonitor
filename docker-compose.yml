@@ -1,6 +1,7 @@
 services:
   nonsense-powermonitor:
     build: .
+    image: nils154/nonsense-powermonitor
     container_name: nonsense-powermonitor
     restart: unless-stopped
     ports:
@@ -10,11 +11,11 @@ services:
       - ./data:/srv/docker/powermonitor/data
     environment:
       - PYTHONUNBUFFERED=1
-      - MQTT_HOST='mqtthost.local'
-      - MQTT_PORT=1883
-      - MQTT_USER='you'
-      - MQTT_PASSWORD='secret'
-      - ENPHASE_EMAIL='you@gmail.com'
-      - ENPHASE_PASSOWRD='alsosecret'
-      - ENVOY_IP='192.168.1.36'
-      - ENVOY_SERIAL="12345678910"
+      #- MQTT_HOST='mqtthost.local'
+      #- MQTT_PORT=1883
+      #- MQTT_USER='you'
+      #- MQTT_PASSWORD='secret'
+      #- ENPHASE_EMAIL='you@gmail.com'
+      #- ENPHASE_PASSOWRD='alsosecret'
+      #- ENVOY_IP='192.168.1.36'
+      #- ENVOY_SERIAL="12345678910"

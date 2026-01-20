@@ -36,20 +36,20 @@ SOLAR_EID=704643328
 
 ```bash
 # Build and start
-docker-compose up -d
+docker compose up -d
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Stop
-docker-compose down
+docker compose down
 ```
 
 ### Using Docker directly
 
 ```bash
 # Build the image
-docker build -t powermonitor .
+docker build -t nils154/nonsense-powermonitor .
 
 # Run the container
 docker run -d \
@@ -58,7 +58,7 @@ docker run -d \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/plots:/app/plots \
   -v $(pwd)/.env:/app/.env:ro \
-  powermonitor
+  nils154/nonsense-powermonitor
 
 # View logs
 docker logs -f powermonitor
@@ -88,7 +88,7 @@ docker exec powermonitor ps aux
 
 ### View logs
 ```bash
-docker-compose logs -f
+docker compose logs -f
 # or
 docker logs -f powermonitor
 ```
@@ -100,6 +100,6 @@ docker exec -it powermonitor /bin/bash
 
 ### Rebuild after code changes
 ```bash
-docker-compose build --no-cache
-docker-compose up -d
+docker compose build --no-cache
+docker compose up -d
 ```
