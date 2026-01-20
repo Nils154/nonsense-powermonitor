@@ -81,7 +81,7 @@ The following variables are optional:
 
 ```bash
 # Build and start
-docker compose up -d
+docker compose up -d --build
 
 # View logs
 docker compose logs -f
@@ -122,13 +122,12 @@ Once running, access the web interface at:
 
 The following directories are mounted as volumes to persist data:
 - `./data` - Contains the SQLite database and analysis files
-- `./plots` - Contains generated plot images
 
 ## Troubleshooting
 
 ### DNS Resolution Issues
 
-**⚠️ Local DNS resolution does not work in Docker containers.**
+**⚠️ Local DNS resolution does not work in Docker containers I guess?.**
 
 If you encounter `socket.gaierror: [Errno -2] Name or service not known` errors, this is likely because:
 - You're using a hostname (like `mqtthost.local`) that cannot be resolved inside the container
