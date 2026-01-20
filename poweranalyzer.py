@@ -130,15 +130,16 @@ class PowerEventAnalyzer:
     def load_events(self):
         """Load events from the database"""
         self.timestamps, self.events = self.db.load_data(existing_timestamps=self.timestamps, existing_events=self.events)
-        self.scaled_events = myscaler(self.events)
-        self.extreme_powers = self.events.max(axis=1)
-        min_powers = self.events.min(axis=1)
-        self.extreme_powers = np.where(np.abs(self.extreme_powers) >= np.abs(min_powers), self.extreme_powers, min_powers)
-        self.clusters = -1*np.ones(len(self.timestamps),dtype=int) # map of the cluster assigned to each event
-        self.devices = -1*np.ones(len(self.timestamps),dtype=int) # map of the device assigned to each event
-        self.n_events = len(self.timestamps)
-        self.first_event = self.timestamps[0]
-        self.last_event = self.timestamps[-1]
+        if len(self.events) > 0:
+            self.scaled_events = myscaler(self.events)
+            self.extreme_powers = self.events.max(axis=1)
+            min_powers = self.events.min(axis=1)
+            self.extreme_powers = np.where(np.abs(self.extreme_powers) >= np.abs(min_powers), self.extreme_powers, min_powers)
+            self.clusters = -1*np.ones(len(self.timestamps),dtype=int) # map of the cluster assigned to each event
+            self.devices = -1*np.ones(len(self.timestamps),dtype=int) # map of the device assigned to each event
+            self.n_events = len(self.timestamps)
+            self.first_event = self.timestamps[0]
+            self.last_event = self.timestamps[-1]
 
 
     def _determine_optimal_clusters(self, max_clusters=MAX_CLUSTERS, unlabeled=False):
@@ -1670,10 +1671,11 @@ if __name__ == "__main__":
     analyzer = PowerEventAnalyzer()
     analyzer.load_events()# Load all data files
     status = analyzer.get_status()
-    print(f"📊 Loaded: {status['number_of_events']} events from database")
-    print(f"   Earliest event: {status['first_event'].strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"   Latest event: {status['last_event'].strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"   Most recent analysis: {status['latest_analysis'].strftime('%Y-%m-%d %H:%M:%S') if status['latest_analysis'] is not None else 'No analysis date found'}")
+    if analyzer.n_events > 0:
+        print(f"📊 Loaded: {analyzer.n_events} events from database")
+        print(f"   Earliest event: {analyzer.first_event.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"   Latest event: {analyzer.last_event.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"   Most recent analysis: {analyzer.date_of_analysis_in_memory.strftime('%Y-%m-%d %H:%M:%S') if analyzer.date_of_analysis_in_memory is not None else 'No analysis date found'}")
     while True:
         choice = get_user_choice()  
         plt.close(bigfig)
