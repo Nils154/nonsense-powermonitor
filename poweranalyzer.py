@@ -84,7 +84,6 @@ class PowerEventAnalyzer:
         self.cluster_medians = np.zeros((0, EVENT_SIZE)) # the profile (median pattern) of each cluster
         self.max_cluster_distances = np.full(0,np.inf) # the maximum distance within each cluster
         # second step is to map the clusters to devices
-        self.n_devices = 0
         self.date_of_analysis_in_memory = None
         self.device_keys = np.array([], dtype=int) # keys for each device (from database)
         self.device_labels = np.array([], dtype=str) # names for each device (labeled clusters become devices)
@@ -554,7 +553,7 @@ class PowerEventAnalyzer:
             logger.info('new analysis found')
             updated_topics = self.load_results_from_database()
             hassmqtt.reconfig(updated_topics)
-        if self.n_devices == 0:
+        if len(self.device_labels) == 0:
             logger.error("No devices found, cannot match event")
             return None, None
         scaled_power_data = myscaler(this_event_power_data.reshape(1, -1))  # make it 2D, 1 row, infer column
