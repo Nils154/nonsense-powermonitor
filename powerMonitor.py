@@ -245,9 +245,9 @@ class EnphaseClient:
                 if self.grid_eid == None:
                     self.grid_eid = eid
                     logger.info(f"Setting GRID_EID to first meter found: {self.grid_eid}")
-                if self.grid_eid == eid:
+                if self.grid_eid is not None and int(self.grid_eid) == eid:
                     comment = " used for consumption meter"
-                elif self.solar_eid == eid:
+                elif self.solar_eid is not None and int(self.solar_eid) == eid:
                     comment = " used for solar meter (added to consumption meter)"
                 else:
                     comment = " unused meter"
@@ -417,9 +417,7 @@ def main():
     # Set specific loggers to INFO level
     logging.getLogger('powerMonitor').setLevel(logging.DEBUG)
     logging.getLogger('poweranalyzer').setLevel(logging.DEBUG)
-    # Also set for when run as script (__main__)
-    if __name__ == '__main__':
-        logging.getLogger('__main__').setLevel(logging.DEBUG)
+    logging.getLogger('__main__').setLevel(logging.DEBUG)
     
     # Initialize database connection
     db = PowerEventDatabase()
