@@ -74,7 +74,7 @@ class PowerEventAnalyzer:
         self.events = np.zeros((0,EVENT_SIZE), dtype=float)
         self.scaled_events = myscaler(self.events)
         self.extreme_powers = self.events.max(axis=1)
-        self.n_events = 0
+    
         self.first_event = None
         self.last_event = None
         self.clusters = -1*np.ones(len(self.timestamps),dtype=int) # map of the cluster assigned to each event
@@ -119,11 +119,13 @@ class PowerEventAnalyzer:
     def get_status(self):
         """Get the status of the database"""
         status = self.db.get_status()
-        self.n_events = status['number_of_events']
         self.date_of_analysis_in_memory = status['latest_analysis']
         self.first_event = status['first_event']
         self.last_event = status['last_event']
-        self.n_devices = status['n_devices']
+        if status['number_of_events'] is not None and status['number_of_events'] > len(self.timestamps):
+            self.load_events()
+        if status['n_devices'] is not None and status['n_devices'] > len(self.device_labels):
+            self.load_results_from_database()   
         return status
 
     def load_events(self):
@@ -136,7 +138,6 @@ class PowerEventAnalyzer:
             self.extreme_powers = np.where(np.abs(self.extreme_powers) >= np.abs(min_powers), self.extreme_powers, min_powers)
             self.clusters = -1*np.ones(len(self.timestamps),dtype=int) # map of the cluster assigned to each event
             self.devices = -1*np.ones(len(self.timestamps),dtype=int) # map of the device assigned to each event
-            self.n_events = len(self.timestamps)
             self.first_event = self.timestamps[0]
             self.last_event = self.timestamps[-1]
 
@@ -691,7 +692,6 @@ class PowerEventAnalyzer:
             self.device_profiles = np.delete(self.device_profiles, device_idx, axis=0)
             self.max_device_distances = np.delete(self.max_device_distances, device_idx)
             self.off_delays = np.delete(self.off_delays, device_idx)
-            self.n_devices -= 1
             # Recalculate scaled profiles
             if len(self.device_profiles) > 0:
                 self.scaled_device_profiles = myscaler(self.device_profiles)
@@ -742,7 +742,6 @@ class PowerEventAnalyzer:
             self.max_device_distances = np.append(self.max_device_distances, self.max_cluster_distances[cluster_id])
             self.off_delays = np.append(self.off_delays, np.array([-1], dtype=int))  # Default off_delay
             self.scaled_device_profiles = myscaler(self.device_profiles)
-            self.n_devices += 1
             self.db.add_device(device_key, label, self.max_cluster_distances[cluster_id], -1, profile)
             
             return next_device_idx
@@ -801,7 +800,6 @@ class PowerEventAnalyzer:
         self.max_device_distances = np.append(self.max_device_distances, match_distance)
         self.off_delays = np.append(self.off_delays, np.array([-1], dtype=int))  # Default off_delay
         self.scaled_device_profiles = myscaler(self.device_profiles)
-        self.n_devices += 1
         
         # Add to database
         self.db.add_device(device_key, label.strip(), match_distance, -1, median_pattern)

@@ -66,8 +66,8 @@ def index():
     
     # create the devices table
     devices_list = []
-    if analyzer is not None and analyzer.n_devices > 0:
-         for device_idx in range(analyzer.n_devices):
+    if analyzer is not None and len(analyzer.device_labels) > 0:
+         for device_idx in range(len(analyzer.device_labels)):  
             label = analyzer.device_labels[device_idx]
             off_delay = analyzer.off_delays[device_idx]
             max_distance = analyzer.max_device_distances[device_idx] 
@@ -97,7 +97,7 @@ def api_fresh_analysis():
     """Run fresh clustering analysis"""
     global analyzer, current_event_index, current_match_distance, mode
     
-    if analyzer is None or analyzer.n_events == 0:
+    if analyzer is None or len(analyzer.timestamps) == 0:
         return jsonify({'success': False, 'message': 'No analysis available'})
     
     mode = 'labeling'
@@ -108,7 +108,7 @@ def api_fresh_analysis():
         'success': True,
         'message': f'Analysis complete: {analyzer.n_clusters} clusters found',
         'n_clusters': analyzer.n_clusters,
-        'n_events': analyzer.n_events
+        'n_events': len(analyzer.timestamps)
     })
 
 @app.route('/api/analyze_unlabeled', methods=['POST'])
@@ -294,19 +294,29 @@ def api_find_event_by_timestamp():
         return jsonify({'success': False, 'message': 'Timestamp required'})
     
     try:
-        # Try to parse the timestamp string
-        # Support various formats like "Jan 5, 4:03am", "2024-01-05 04:03", etc.
+        # Parse the timestamp string - should be ISO format from datetime-local input
+        # datetime-local sends ISO format: "2024-01-05T16:03:00.000Z" (UTC) when converted via toISOString()
         try:
-            # Use fuzzy parsing to handle various formats
-            target_timestamp = parser.parse(timestamp_str, fuzzy=True)
-        except Exception as e:
+            # Try parsing as ISO format first (most reliable for timezone-aware timestamps)
+            # Check if it looks like ISO format (has 'T' or timezone info)
+            if 'T' in timestamp_str:
+                # Use isoparse if available (Python 3.7+), otherwise use parse
+                try:
+                    target_timestamp = parser.isoparse(timestamp_str)
+                except AttributeError:
+                    # Fallback for older Python versions
+                    target_timestamp = parser.parse(timestamp_str)
+            else:
+                # Fallback to fuzzy parsing for other formats (backward compatibility)
+                target_timestamp = parser.parse(timestamp_str, fuzzy=True)
+            
+            # Ensure target_timestamp is timezone-aware
+            if target_timestamp.tzinfo is None:
+                # If naive, assume it's in UTC (ISO strings from toISOString() are in UTC)
+                from datetime import timezone
+                target_timestamp = target_timestamp.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError) as e:
             return jsonify({'success': False, 'message': f'Could not parse timestamp "{timestamp_str}": {str(e)}'})
-        
-        # Ensure target_timestamp is timezone-aware (add local timezone if naive)
-        if target_timestamp.tzinfo is None:
-            from datetime import datetime
-            local_tz = datetime.now().astimezone().tzinfo
-            target_timestamp = target_timestamp.replace(tzinfo=local_tz)
         
         # Find the event with the closest timestamp
         timestamps_array = analyzer.timestamps
@@ -336,8 +346,8 @@ def api_find_event_by_timestamp():
         mode = 'browse'  # User manually navigated, switch to browse mode
         
         # Ensure index is valid
-        if current_event_index >= analyzer.n_events:
-            current_event_index = analyzer.n_events - 1
+        if current_event_index >= len(analyzer.timestamps):
+            current_event_index = len(analyzer.timestamps) - 1
         if current_event_index < 0:
             current_event_index = 0
         
@@ -384,7 +394,7 @@ def api_complete_labeling():
     return jsonify({
         'success': True,
         'message': 'Labeling complete. Results saved.',
-        'n_devices': analyzer.n_devices
+        'n_devices': len(analyzer.device_labels)
     })
 
 @app.route('/api/devices', methods=['GET'])
@@ -471,7 +481,7 @@ def api_save_device():
             event_index = int(data.get('event_index'))
             match_distance = float(data.get('match_distance', current_match_distance))
             
-            if event_index < 0 or event_index >= analyzer.n_events:
+            if event_index < 0 or event_index >= len(analyzer.timestamps):
                 return jsonify({'success': False, 'message': f'Invalid event_index: {event_index}'})
             
             if match_distance <= 0:
@@ -526,12 +536,11 @@ def api_check_updates():
     if mode == 'monitor':
         analyzer.get_status()
 
-    if mode == 'monitor' and analyzer.n_events > current_event_index+1:
+    if mode == 'monitor' and len(analyzer.timestamps) > current_event_index+1:
         # new events have been added to the database and we need to reload the events
         # and show the last event
-        current_event_index = analyzer.n_events - 1
+        current_event_index = len(analyzer.timestamps) - 1
         #pull the last event from  the database
-        analyzer.load_events()
         has_update = True
         logger.info(f"📊 Polling detected update: current event index changed to {current_event_index}")
     else:
@@ -550,8 +559,8 @@ def api_check_updates():
     return jsonify({
         'success': True,
         'has_update': has_update,
-        'event_count': analyzer.n_events,
-        'device_count': analyzer.n_devices,
+        'event_count': len(analyzer.timestamps),
+        'device_count': len(analyzer.device_labels),
         'first_event_timestamp': first_event_iso
     })
 
@@ -563,7 +572,7 @@ def api_get_plots():
     
     start_time = time.time()
     
-    if analyzer is None or analyzer.events is None or analyzer.n_events == 0:
+    if analyzer is None or analyzer.events is None or len(analyzer.timestamps) == 0:
         return jsonify({'success': False, 'message': 'No analysis or data available'})
     
     # Get event_index from query parameter if provided
@@ -579,9 +588,9 @@ def api_get_plots():
         mode = 'browse'  # User changed match distance, switch to browse mode
     
     if current_event_index is None:
-        current_event_index = analyzer.n_events - 1
-    if current_event_index >= analyzer.n_events:
-        current_event_index = analyzer.n_events - 1
+        current_event_index = len(analyzer.timestamps) - 1
+    if current_event_index >= len(analyzer.timestamps):
+        current_event_index = len(analyzer.timestamps) - 1
     if current_event_index < 0:
         current_event_index = 0 
     current_event = analyzer.events[current_event_index]
@@ -669,7 +678,7 @@ def api_get_plots():
         'power': power_base64,
         'histogram': hist_base64,
         'event_index': current_event_index,
-        'total_events': analyzer.n_events,
+        'total_events': len(analyzer.timestamps),
         'timestamp': str(current_timestamp),
         'device_idx': int(current_device_idx) if current_device_idx is not None else None,
         'device_label': device_label,
@@ -908,8 +917,8 @@ def api_browse_event():
             mode = 'browse'  # Switch to browse mode when user navigates
             current_event_index += 1
             # Ensure index is valid after increment
-            if current_event_index >= analyzer.n_events:
-                current_event_index = analyzer.n_events - 1
+            if current_event_index >= len(analyzer.timestamps):
+                current_event_index = len(analyzer.timestamps) - 1
         elif action == 'P':  # Previous event
             mode = 'browse'  # Switch to browse mode when user navigates
             current_event_index -= 1
@@ -920,8 +929,8 @@ def api_browse_event():
             mode = 'monitor'  # Switch to monitor mode when latest is active
         
         # Ensure index is valid (for all actions)
-        if current_event_index >= analyzer.n_events:
-            current_event_index = analyzer.n_events - 1
+        if current_event_index >= len(analyzer.timestamps):
+            current_event_index = len(analyzer.timestamps) - 1
         if current_event_index < 0:
             current_event_index = 0
         
@@ -975,7 +984,7 @@ if __name__ == '__main__':
     logger.info(f"   Found {status['number_of_events']} events")
     logger.info(f"   First event: {status['first_event'].strftime('%Y-%m-%d %H:%M:%S') if status['first_event'] else 'unknown'}")
     logger.info(f"   Last event: {status['last_event'].strftime('%Y-%m-%d %H:%M:%S') if status['last_event'] else 'unknown'}")
-    current_event_index = analyzer.n_events - 1 if analyzer.n_events is not None else None
+    current_event_index = len(analyzer.timestamps) - 1 if len(analyzer.timestamps) is not None else None
     if status['latest_analysis'] is not None:
         analyzer.load_results_from_database()
         current_match_distance = float(np.min(analyzer.max_device_distances))

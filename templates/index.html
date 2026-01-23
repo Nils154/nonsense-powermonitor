@@ -386,10 +386,10 @@
         <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
             <div style="display: flex; align-items: center; gap: 8px; background: white; padding: 5px 10px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
                 <label for="timestamp-input" style="font-weight: 600; color: #333;">Timestamp:</label>
-                <input type="text" id="timestamp-input" 
-                       placeholder="Jan 5, 4:03am"
+                <input type="datetime-local" id="timestamp-input" 
                        style="width: 200px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 1em;"
-                       onchange="updateEventFromTimestamp()" onkeydown="if(event.key==='Enter') updateEventFromTimestamp();">
+                       onchange="updateEventFromTimestamp()">
+                <span id="timezone-indicator" style="color: #666; font-size: 0.9em; margin-left: 5px;"></span>
                 <label for="match-distance-input" style="font-weight: 600; color: #333; margin-left: 10px;">Match Distance:</label>
                 <input type="number" id="match-distance-input" min="0" step="25" value="500" 
                        style="width: 100px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 1em;">
@@ -580,6 +580,9 @@
             newImg.style.display = 'none';
         }
         
+        // Initialize timezone indicator on page load
+        updateTimezoneIndicator();
+        
         async function loadPlots(sendMatchDistance = false) {
             // Clear selected device when switching to event view
             selectedDeviceIdx = null;
@@ -715,7 +718,8 @@
                     const timestamp = new Date(data.timestamp);
                     const formattedTimestamp = formatTimestamp(timestamp);
                     document.getElementById('event-timestamp').textContent = formattedTimestamp;
-                    updateTimestampInput();
+                    // Update datetime-local input with the timestamp
+                    updateTimestampInputFromDate(timestamp);
                     // Display device ID and label
                     if (data.device_idx !== null && data.device_idx !== undefined && data.device_idx !== -1) {
                         const deviceText = data.device_label ? `${data.device_idx}: ${data.device_label}` : `Device ${data.device_idx}`;
@@ -1326,6 +1330,49 @@
             return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}${timezoneStr}`;
         }
         
+        function updateTimezoneIndicator() {
+            // Update the timezone indicator to show user's local timezone
+            const tzIndicator = document.getElementById('timezone-indicator');
+            if (tzIndicator) {
+                try {
+                    const now = new Date();
+                    const tzName = Intl.DateTimeFormat('en', { timeZoneName: 'short' }).formatToParts(now)
+                        .find(part => part.type === 'timeZoneName');
+                    if (tzName && tzName.value) {
+                        tzIndicator.textContent = tzName.value;
+                    } else {
+                        // Fallback to offset
+                        const offset = -now.getTimezoneOffset();
+                        const offsetHours = Math.floor(Math.abs(offset) / 60);
+                        const offsetMinutes = Math.abs(offset) % 60;
+                        const offsetSign = offset >= 0 ? '+' : '-';
+                        tzIndicator.textContent = `UTC${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+                    }
+                } catch (e) {
+                    tzIndicator.textContent = '';
+                }
+            }
+        }
+        
+        function updateTimestampInputFromDate(date) {
+            // Update the timestamp input field from a Date object
+            // datetime-local uses the browser's local timezone automatically
+            const timestampInput = document.getElementById('timestamp-input');
+            if (timestampInput && date && !isNaN(date.getTime())) {
+                // Only update if the input doesn't have focus (user isn't editing it)
+                if (document.activeElement !== timestampInput) {
+                    // Convert to datetime-local format (YYYY-MM-DDTHH:mm)
+                    // Date object is already in local timezone, so we can use it directly
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const hours = String(date.getHours()).padStart(2, '0');
+                    const minutes = String(date.getMinutes()).padStart(2, '0');
+                    timestampInput.value = `${year}-${month}-${day}T${hours}:${minutes}`;
+                }
+            }
+        }
+        
         function updateTimestampInput() {
             // Update the timestamp input field to show current event timestamp
             const timestampInput = document.getElementById('timestamp-input');
@@ -1335,7 +1382,15 @@
                     // Get timestamp from the event info display
                     const timestampSpan = document.getElementById('event-timestamp');
                     if (timestampSpan && timestampSpan.textContent) {
-                        timestampInput.value = timestampSpan.textContent;
+                        // Try to parse the displayed text as a date
+                        try {
+                            const date = new Date(timestampSpan.textContent);
+                            if (!isNaN(date.getTime())) {
+                                updateTimestampInputFromDate(date);
+                            }
+                        } catch (e) {
+                            // If parsing fails, the timestamp will be updated when loadPlots() runs
+                        }
                     }
                 }
             }
@@ -1346,16 +1401,26 @@
             const timestampInput = document.getElementById('timestamp-input');
             if (!timestampInput) return;
             
-            const timestampStr = timestampInput.value.trim();
-            if (!timestampStr) {
+            const timestampValue = timestampInput.value.trim();
+            if (!timestampValue) {
                 // Empty - reset to current
                 updateTimestampInput();
                 return;
             }
             
             try {
-                // Send timestamp to backend to find nearest event
-                const response = await fetch(`/api/find_event_by_timestamp?timestamp=${encodeURIComponent(timestampStr)}`);
+                // Convert datetime-local value to ISO string for backend
+                // datetime-local gives us "YYYY-MM-DDTHH:mm" in local time
+                // Parse it explicitly as local time to avoid timezone issues
+                const [datePart, timePart] = timestampValue.split('T');
+                const [year, month, day] = datePart.split('-').map(Number);
+                const [hours, minutes] = timePart.split(':').map(Number);
+                // Create date in local timezone
+                const localDate = new Date(year, month - 1, day, hours, minutes);
+                // Send as ISO string to backend (converts to UTC)
+                const isoString = localDate.toISOString();
+                
+                const response = await fetch(`/api/find_event_by_timestamp?timestamp=${encodeURIComponent(isoString)}`);
                 const data = await response.json();
                 
                 if (data.success) {
@@ -1467,7 +1532,8 @@
                 }
                 
                 if (data.success) {
-                    const currentEventCount = parseInt(document.getElementById('status-events').textContent);
+                    // Use totalEvents variable instead of parsing DOM text (which shows "0 to n-1" format)
+                    const currentEventCount = totalEvents;
                     if (data.has_update || data.event_count !== currentEventCount) {
                         // Final check before updating - state might have changed during async operations
                         if (!latestModeActive) {
@@ -1731,6 +1797,18 @@
                 content.textContent = newValue.toFixed(2);
             } else {
                 content.textContent = newValue;
+            }
+            
+            // Update the data-sort-* attribute on the row for sorting
+            const row = cell.closest('.device-row');
+            if (row) {
+                if (fieldName === 'label') {
+                    row.setAttribute('data-sort-label', newValue.toLowerCase());
+                } else if (fieldName === 'max_distance') {
+                    row.setAttribute('data-sort-max-distance', newValue >= 0 ? newValue.toFixed(2) : -1);
+                } else if (fieldName === 'off_delay') {
+                    row.setAttribute('data-sort-off-delay', newValue >= 0 ? newValue : -1);
+                }
             }
             
             // Save to backend

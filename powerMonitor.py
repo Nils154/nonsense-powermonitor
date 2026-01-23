@@ -398,7 +398,7 @@ class PowerTracking:
             # Get updated average
             self.baseline_power = self.db.get_baseline_power()
             if self.baseline_power is not None:
-                self.hassmqtt.send("baseline_power", str(self.baseline_power ), False)
+                self.hassmqtt.update("baseline_power", str(self.baseline_power ), False)
                 logger.debug(f"Updated baseline_power {self.baseline_power }")
             
             # Reset for new hour
