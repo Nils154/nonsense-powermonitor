@@ -23,15 +23,21 @@ It also lets you browse events or devices or jump to an event at a particular da
 ## Event detection and MQTT
 
 In the background, the power is monitored using an INTERVAL=once-per-second power measurement from my Enphase setup. 
+
 Other hardware can easily be added in `powerMonitor.py`.
+
 However, the sense device sends a packet every 2 seconds; it contains no useful information, and every 2 seconds is too slow.
+
 Would be nice if they could change that (see sense_listener.py).
+
 Power has to change by TRIGGER = 20 W to trigger an event. 
+
 I realize that depending on your setup, you might need to increase this threshold.
-    - TVs and computers use very unpredictable amounts of power and look like noise.
-    - LEDs use very little power and often blend in with TVs and computers, so they are difficult to detect.
-    - (A possible future feature: add MQTT inputs from smart plugs through Home Assistant.)
-- After an event is triggered, EVENT_SIZE = 20 seconds of data are recorded and saved as an event.
+- TVs and computers use very unpredictable amounts of power and look like noise.
+- LEDs use very little power and often blend in with TVs and computers, so they are difficult to detect.
+- (A possible future feature: add MQTT inputs from smart plugs through Home Assistant.)
+
+After an event is triggered, EVENT_SIZE = 20 seconds of data are recorded and saved as an event.
 - The event is compared to "devices" stored in the database.
 - If a match is found, MQTT sends an `ON` message if the average net power during the 20 s > 0, and `OFF` if <= 0.
 - An average power message is also sent for the device.
