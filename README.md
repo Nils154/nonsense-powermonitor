@@ -4,6 +4,8 @@ Now that Sense no longer sells the orange powermonitor, and the green powermonit
 
 You need to have Home Assistant installed for viewing and logging the results of the powermonitor
 
+![Home Assistant Graph](docs/images/HomeAssistantGraph.png)
+
 This app uses a INTERVAL=once-per-second power measurement from my Enphase setup. Other hardware can easily be added in `powerMonitor.py`.
 
 ## Overview
