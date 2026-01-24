@@ -8,9 +8,7 @@ You need to have Home Assistant installed for viewing and logging the results of
 
 As the Home Assistant graph shows, each device ON/OFF state is tracked, the baseline power (always on) is tracked, and the unknown power is tracked.
 
-This app uses a INTERVAL=once-per-second power measurement from my Enphase setup. Other hardware can easily be added in `powerMonitor.py`.
-The sense device sends a packet every 2 seconds, but it contains no useful information, and every 2 seconds is too slow.
-Would be nice if they could change that (see sense_listener.py)
+
 
 ## Overview
 
@@ -24,7 +22,12 @@ It also lets you browse events or devices or jump to an event at a particular da
 
 ## Event detection and MQTT
 
-In the background, the power is monitored, and has to change by TRIGGER = 20 W to trigger an event. I realize that depending on your setup, you might need to increase this threshold, I should make it an environmental variable.
+In the background, the power is monitored using an INTERVAL=once-per-second power measurement from my Enphase setup. 
+Other hardware can easily be added in `powerMonitor.py`.
+However, the sense device sends a packet every 2 seconds; it contains no useful information, and every 2 seconds is too slow.
+Would be nice if they could change that (see sense_listener.py).
+Power has to change by TRIGGER = 20 W to trigger an event. 
+I realize that depending on your setup, you might need to increase this threshold.
     - TVs and computers use very unpredictable amounts of power and look like noise.
     - LEDs use very little power and often blend in with TVs and computers, so they are difficult to detect.
     - (A possible future feature: add MQTT inputs from smart plugs through Home Assistant.)
