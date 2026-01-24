@@ -6,7 +6,11 @@ You need to have Home Assistant installed for viewing and logging the results of
 
 ![Home Assistant Graph](docs/images/HomeAssistantGraph.png)
 
+As the Home Assistant graph shows, each device ON/OFF state is tracked, the baseline power (always on) is tracked, and the unknown power is tracked.
+
 This app uses a INTERVAL=once-per-second power measurement from my Enphase setup. Other hardware can easily be added in `powerMonitor.py`.
+The sense device sends a packet every 2 seconds, but it contains no useful information, and every 2 seconds is too slow.
+Would be nice if they could change that (see sense_listener.py)
 
 ## Overview
 
