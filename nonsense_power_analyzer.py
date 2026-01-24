@@ -476,50 +476,23 @@ def api_save_device():
         return jsonify({'success': False, 'message': 'Device name required'})
     
     try:
-        # If event_index is provided, use the new add_device method (browse mode)
-        if 'event_index' in data:
-            event_index = int(data.get('event_index'))
-            match_distance = float(data.get('match_distance', current_match_distance))
-            
-            if event_index < 0 or event_index >= len(analyzer.timestamps):
-                return jsonify({'success': False, 'message': f'Invalid event_index: {event_index}'})
-            
-            if match_distance <= 0:
-                return jsonify({'success': False, 'message': 'Match distance must be greater than 0'})
-            
-            # Use the new add_device method
-            device_idx = analyzer.add_device(event_index, match_distance, device_name)
-            
-            return jsonify({
-                'success': True,
-                'message': f'Device "{device_name}" saved from event {event_index}',
-                'device_idx': device_idx
-            })
-        else:
-            # Legacy method: use provided pattern and distance
-            median_pattern = np.array(data.get('pattern'))
-            match_distance = float(data.get('distance'))
-            
-            next_device_idx = len(analyzer.device_labels)
-            
-            # Add device to arrays (device_keys will be updated when saving to database)
-            analyzer.device_labels = np.append(analyzer.device_labels, device_name)
-            analyzer.device_profiles = np.vstack([analyzer.device_profiles, median_pattern.reshape(1, -1)])
-            analyzer.max_device_distances = np.append(analyzer.max_device_distances, match_distance)
-            analyzer.off_delays = np.append(analyzer.off_delays, np.array([-1], dtype=int))
-            analyzer.scaled_device_profiles = myscaler(analyzer.device_profiles)
-            
-            # Reassign devices
-            analyzer._reassign_devices_from_medians()
-            
-            # Save results to database
-            analyzer.save_results_to_database()
-            
-            return jsonify({
-                'success': True,
-                'message': f'Device "{device_name}" saved',
-                'device_idx': next_device_idx
-            })
+        event_index = int(data.get('event_index'))
+        match_distance = float(data.get('match_distance', current_match_distance))
+        
+        if event_index < 0 or event_index >= len(analyzer.timestamps):
+            return jsonify({'success': False, 'message': f'Invalid event_index: {event_index}'})
+        
+        if match_distance <= 0:
+            return jsonify({'success': False, 'message': 'Match distance must be greater than 0'})
+        
+        # Use the add_device method
+        device_idx = analyzer.add_device(event_index, match_distance, device_name)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Device "{device_name}" saved from event {event_index}',
+            'device_idx': device_idx
+        })
     except Exception as e:
         logger.error(f"Error saving device: {e}")
         import traceback

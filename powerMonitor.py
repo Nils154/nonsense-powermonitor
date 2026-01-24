@@ -383,8 +383,6 @@ class PowerTracking:
             else:
                 logger.error("Baseline power is None, cannot calculate unknown power")
                 unknown_power = 0
-            if unknown_power < 0:
-                unknown_power = 0
             self.hassmqtt.update("unknown_power", str(unknown_power), False)
             logger.debug(f"Unknown power: {unknown_power}")
         self.power_sum += activePower

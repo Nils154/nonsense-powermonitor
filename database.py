@@ -296,16 +296,14 @@ class PowerEventDatabase:
             self.conn.rollback()
             return False
     
-    def load_data(self, existing_timestamps=None, existing_events=None):
+    def load_events(self, events_since=None):
         """
-        Load data from the database.
+        Load events from the database.
         
         Args:
-            existing_timestamps: Optional numpy array of existing timestamps. If provided,
-                                only events with timestamps newer than the latest existing
-                                timestamp will be returned.
-            existing_events: Optional 2D numpy array of existing events (must match length
-                           of existing_timestamps if provided).
+            events_since: Optional datetime with timezone object. If provided,
+                         only events with timestamps newer than events_since will be returned.
+                         If None, all events are returned.
         
         Returns:
             tuple: (timestamps, events) where:
@@ -314,16 +312,9 @@ class PowerEventDatabase:
         
         Raises:
             RuntimeError: If database connection is not established
-            ValueError: If existing_timestamps and existing_events have mismatched lengths
         """
         if self.conn is None:
             raise RuntimeError("Database connection not established")
-        
-        # Validate existing arrays if provided
-        if existing_timestamps is not None and existing_events is not None:
-            if len(existing_timestamps) != len(existing_events):
-                raise ValueError(f"existing_timestamps and existing_events must have the same length, "
-                               f"got {len(existing_timestamps)} and {len(existing_events)}")
         
         cursor = self.conn.cursor()
         
@@ -331,23 +322,20 @@ class PowerEventDatabase:
         power_cols = [f'P{i+1:02d}' for i in range(EVENT_SIZE)]
         select_cols = ['timeStamp'] + power_cols
         
-        # Determine minimum timestamp if appending to existing data
-        min_timestamp_str = None
-        if existing_timestamps is not None and len(existing_timestamps) > 0:
-            # Find the maximum timestamp in existing data
-            max_existing = np.max(existing_timestamps)
+        # Build SQL query based on events_since parameter
+        if events_since is not None:
+            # Ensure events_since is timezone-aware
+            if events_since.tzinfo is None:
+                raise ValueError("events_since must be a timezone-aware datetime object")
             # Convert to ISO format string for SQL comparison
-            min_timestamp_str = max_existing.isoformat()
-        
-        # Build SQL query
-        if min_timestamp_str is not None:
+            events_since_str = events_since.isoformat()
             query = f"""
                 SELECT {', '.join(select_cols)}
                 FROM events
                 WHERE timeStamp > ?
                 ORDER BY timeStamp ASC
             """
-            cursor.execute(query, (min_timestamp_str,))
+            cursor.execute(query, (events_since_str,))
         else:
             query = f"""
                 SELECT {', '.join(select_cols)}
@@ -360,13 +348,8 @@ class PowerEventDatabase:
         rows = cursor.fetchall()
         
         if len(rows) == 0:
-            # No new data
-            if existing_timestamps is not None and existing_events is not None:
-                # Return existing arrays unchanged
-                return existing_timestamps.copy(), existing_events.copy()
-            else:
-                # Return empty arrays
-                return np.array([], dtype=float), np.empty((0, EVENT_SIZE), dtype=float)
+            # No events found
+            return np.array([], dtype=object), np.empty((0, EVENT_SIZE), dtype=float)
         
         # Extract timestamps and power values
         new_timestamps = []
@@ -412,23 +395,8 @@ class PowerEventDatabase:
         if new_events_array.shape[1] != EVENT_SIZE:
             raise RuntimeError(f"Expected {EVENT_SIZE} power values per event, got {new_events_array.shape[1]}")
         
-        # Combine with existing data if provided
-        if existing_timestamps is not None and existing_events is not None:
-            # Concatenate arrays
-            combined_timestamps = np.concatenate([existing_timestamps, new_timestamps_array])
-            combined_events = np.vstack([existing_events, new_events_array])
-            
-            # Sort by timestamp to ensure ordering
-            sort_indices = np.argsort(combined_timestamps)
-            combined_timestamps = combined_timestamps[sort_indices]
-            combined_events = combined_events[sort_indices]
-            
-            logger.debug(f"Loaded {len(new_timestamps_array)} new events, "
-                        f"total: {len(combined_timestamps)} events")
-            return combined_timestamps, combined_events
-        else:
-            logger.debug(f"Loaded {len(new_timestamps_array)} events from database")
-            return new_timestamps_array, new_events_array
+        logger.debug(f"Loaded {len(new_timestamps_array)} events from database")
+        return new_timestamps_array, new_events_array
     
     def update_hourly_minimum_power(self, hour, minimum_power):
         """

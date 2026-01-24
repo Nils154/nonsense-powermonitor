@@ -130,16 +130,76 @@ class PowerEventAnalyzer:
 
     def load_events(self):
         """Load events from the database"""
-        self.timestamps, self.events = self.db.load_data(existing_timestamps=self.timestamps, existing_events=self.events)
+        # Determine events_since: use max of existing timestamps if available
+        events_since = None
+        if hasattr(self, 'timestamps') and self.timestamps is not None and len(self.timestamps) > 0:
+            events_since = np.max(self.timestamps)
+        
+        # Load new events from database
+        new_timestamps, new_events = self.db.load_events(events_since=events_since)
+        
+        # Combine with existing data if we have any
+        if events_since is not None:
+            # We have existing data - combine with new data if any
+            if len(new_timestamps) > 0:
+                # Concatenate arrays
+                self.timestamps = np.concatenate([self.timestamps, new_timestamps])
+                self.events = np.vstack([self.events, new_events])
+                new_unlabeled = -1*np.ones(len(new_timestamps), dtype=int)
+                self.devices = np.concatenate([self.devices, new_unlabeled])
+                self.clusters = np.concatenate([self.clusters, new_unlabeled])
+                # Sort by timestamp to ensure ordering
+                sort_indices = np.argsort(self.timestamps)
+                self.timestamps = self.timestamps[sort_indices]
+                self.events = self.events[sort_indices]
+                self.devices = self.devices[sort_indices]
+                self.clusters = self.clusters[sort_indices]
+            # If no new events, keep existing data unchanged (self.timestamps and self.events remain as they were)
+        else:
+            # First load - use the loaded data directly
+            self.timestamps = new_timestamps
+            self.events = new_events
+            # Initialize devices and clusters arrays
+            self.clusters = -1*np.ones(len(self.timestamps), dtype=int)
+            self.devices = -1*np.ones(len(self.timestamps), dtype=int)
+        
         if len(self.events) > 0:
             self.scaled_events = myscaler(self.events)
             self.extreme_powers = self.events.max(axis=1)
             min_powers = self.events.min(axis=1)
             self.extreme_powers = np.where(np.abs(self.extreme_powers) >= np.abs(min_powers), self.extreme_powers, min_powers)
-            self.clusters = -1*np.ones(len(self.timestamps),dtype=int) # map of the cluster assigned to each event
-            self.devices = -1*np.ones(len(self.timestamps),dtype=int) # map of the device assigned to each event
             self.first_event = self.timestamps[0]
             self.last_event = self.timestamps[-1]
+        
+        # Reassign devices if we have device labels and need to process unlabeled events
+        if len(self.device_labels) > 0 and len(self.events) > 0:
+            # Count labeled and unlabeled events
+            unlabeled_mask = self.devices == -1
+            n_unlabeled = np.sum(unlabeled_mask)
+            n_labeled = len(self.devices) - n_unlabeled
+            
+            should_reassign = False
+            
+            # Check if more unlabeled than labeled, for early on analysis.
+            # once established, only reassingn every 24 hours.
+            if n_unlabeled > n_labeled:
+                should_reassign = True
+                logger.debug(f"Reassigning devices: {n_unlabeled} unlabeled > {n_labeled} labeled")
+            elif n_unlabeled > 0:
+                # Check if most recent unlabeled events span over 24 hours
+                unlabeled_timestamps = self.timestamps[unlabeled_mask]
+                labeled_timestamps = self.timestamps[~unlabeled_mask]
+                if len(unlabeled_timestamps) > 0:
+                    # See if we have 24 hours of unlabeled events since the last labeled event
+                    max_labeled = np.max(labeled_timestamps)
+                    max_unlabeled = np.max(unlabeled_timestamps)
+                    time_range = max_unlabeled - max_labeled
+                    if time_range > timedelta(hours=24):
+                        should_reassign = True
+                        logger.debug(f"Reassigning devices: unlabeled events span {time_range} (> 24 hours) since last labeled event    ")
+            
+            if should_reassign:
+                self._reassign_devices_from_medians()
 
 
     def _determine_optimal_clusters(self, max_clusters=MAX_CLUSTERS, unlabeled=False):
