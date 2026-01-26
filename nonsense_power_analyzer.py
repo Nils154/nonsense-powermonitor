@@ -11,22 +11,20 @@ from flask import Flask, render_template, request, jsonify
 import numpy as np
 import os
 import time
-from datetime import datetime
-import logging
 import base64
 import io
 from dateutil import parser
 from poweranalyzer import PowerEventAnalyzer, myscaler
-from database import PowerEventDatabase
 from scipy.spatial.distance import cdist
 
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend for web
 import matplotlib.pyplot as plt
         
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Set up logging using centralized configuration
+from logging_config import setup_default_logging, get_logger
+setup_default_logging()
+logger = get_logger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # For session management
@@ -35,7 +33,6 @@ app.secret_key = os.urandom(24)  # For session management
 current_event_index = None
 current_match_distance = 500
 analyzer = None
-mode = 'monitor'
 
 # Progress tracking for plot generation
 plot_progress_scaling_factor = 0.5  # Calibrates over time
@@ -44,7 +41,7 @@ plot_progress_scaling_factor = 0.5  # Calibrates over time
 @app.route('/')
 def index():
     """Main dashboard"""
-    global current_event_index, current_match_distance, analyzer, mode
+    global current_event_index, current_match_distance, analyzer
     # Get status from analyzer
     status = analyzer.get_status() if analyzer is not None else {
         'latest_analysis': None,
@@ -95,12 +92,11 @@ def index():
 @app.route('/api/fresh_analysis', methods=['POST'])
 def api_fresh_analysis():
     """Run fresh clustering analysis"""
-    global analyzer, current_event_index, current_match_distance, mode
+    global analyzer, current_event_index, current_match_distance
     
     if analyzer is None or len(analyzer.timestamps) == 0:
         return jsonify({'success': False, 'message': 'No analysis available'})
     
-    mode = 'labeling'
     logger.info("⏸️  Pausing data reloading for cluster labeling")
     analyzer.perform_clustering()
     
@@ -284,7 +280,7 @@ def api_label_cluster():
 @app.route('/api/find_event_by_timestamp', methods=['GET'])
 def api_find_event_by_timestamp():
     """Find the nearest event to a given timestamp"""
-    global analyzer, current_event_index, mode
+    global analyzer, current_event_index
     
     if analyzer is None or analyzer.events is None or len(analyzer.events) == 0:
         return jsonify({'success': False, 'message': 'No analysis or data available'})
@@ -341,9 +337,8 @@ def api_find_event_by_timestamp():
         # Find the index with minimum difference
         nearest_index = int(np.argmin(differences_seconds))
         
-        # Update server-side current_event_index and mode
+        # Update server-side current_event_index
         current_event_index = nearest_index
-        mode = 'browse'  # User manually navigated, switch to browse mode
         
         # Ensure index is valid
         if current_event_index >= len(analyzer.timestamps):
@@ -383,13 +378,12 @@ def api_find_event_by_timestamp():
 @app.route('/api/complete_labeling', methods=['POST'])
 def api_complete_labeling():
     """Save results and complete cluster labeling"""
-    global analyzer, mode
+    global analyzer
     
     if analyzer is None:
         return jsonify({'success': False, 'message': 'No analysis available'})
     
     analyzer.save_results_to_database()
-    mode = 'monitor'
     logger.info("▶️  Resuming data reloading after cluster labeling")
     return jsonify({
         'success': True,
@@ -464,7 +458,7 @@ def api_get_clusters():
 @app.route('/api/save_device', methods=['POST'])
 def api_save_device():
     """Save a new device from matching events"""
-    global analyzer, current_event_index, current_match_distance, mode
+    global analyzer, current_event_index, current_match_distance
     
     if analyzer is None:
         return jsonify({'success': False, 'message': 'No analysis loaded'})
@@ -503,13 +497,12 @@ def api_save_device():
 @app.route('/api/check_updates', methods=['GET'])
 def api_check_updates():
     """Check if data has been updated (for polling)"""
-    global analyzer, current_event_index, current_match_distance, mode
+    global analyzer, current_event_index, current_match_distance
     
-    # Get status from database
-    if mode == 'monitor':
-        analyzer.get_status()
+    # Get status from database (client only calls this when latest mode is active)
+    analyzer.get_status()
 
-    if mode == 'monitor' and len(analyzer.timestamps) > current_event_index+1:
+    if len(analyzer.timestamps) > current_event_index+1:
         # new events have been added to the database and we need to reload the events
         # and show the last event
         current_event_index = len(analyzer.timestamps) - 1
@@ -540,7 +533,7 @@ def api_check_updates():
 @app.route('/api/get_plots', methods=['GET'])
 def api_get_plots():
     """Get plots for current event as base64 images"""
-    global analyzer, current_event_index, current_match_distance, mode
+    global analyzer, current_event_index, current_match_distance
     global plot_progress_scaling_factor, plot_generation_times
     
     start_time = time.time()
@@ -552,13 +545,11 @@ def api_get_plots():
     requested_index = request.args.get('event_index', type=int)
     if requested_index is not None:
         current_event_index = requested_index
-        mode = 'browse'  # User is navigating, switch to browse mode
     
     # Get match_distance from query parameter if provided (overrides device's max_distance)
     requested_match_distance = request.args.get('match_distance', type=float)
     if requested_match_distance is not None:
         current_match_distance = requested_match_distance
-        mode = 'browse'  # User changed match distance, switch to browse mode
     
     if current_event_index is None:
         current_event_index = len(analyzer.timestamps) - 1
@@ -664,7 +655,7 @@ def api_get_plots():
 @app.route('/api/get_device_plots', methods=['GET'])
 def api_get_device_plots():
     """Get plots for all events matching a specific device"""
-    global analyzer, current_match_distance, plot_progress_scaling_factor, mode
+    global analyzer, current_match_distance, plot_progress_scaling_factor
     
     if analyzer is None or analyzer.events is None or len(analyzer.events) == 0:
         return jsonify({'success': False, 'message': 'No analysis or data available'})
@@ -676,8 +667,7 @@ def api_get_device_plots():
     if device_idx < 0 or device_idx >= len(analyzer.device_labels):
         return jsonify({'success': False, 'message': f'Device {device_idx} not found'})
     
-    # Set mode to browse when viewing a device (prevents auto-updates)
-    mode = 'browse'
+    # Viewing a device (client controls auto-updates via updateInterval)
     
     # Get optional match_distance override, otherwise use device's max_distance
     match_distance_override = request.args.get('match_distance', type=float)
@@ -793,7 +783,7 @@ def api_get_device_plots():
 @app.route('/api/update_device', methods=['POST'])
 def api_update_device():
     """Update device properties (label, max_distance, off_delay)"""
-    global analyzer, current_event_index, current_match_distance, mode
+    global analyzer, current_event_index, current_match_distance
     
     if analyzer is None:
         return jsonify({'success': False, 'message': 'No analysis loaded'})
@@ -839,7 +829,7 @@ def api_update_device():
 @app.route('/api/delete_device', methods=['POST'])
 def api_delete_device():
     """Delete a device"""
-    global analyzer, current_event_index, current_match_distance, mode
+    global analyzer, current_event_index, current_match_distance
     
     if analyzer is None:
         return jsonify({'success': False, 'message': 'No analysis loaded'})
@@ -871,7 +861,7 @@ def api_delete_device():
 @app.route('/api/browse_event', methods=['POST'])
 def api_browse_event():
     """Handle browse event actions (N, P, E, M, S)"""
-    global analyzer, current_event_index, current_match_distance, mode
+    global analyzer, current_event_index, current_match_distance
     
     if analyzer is None:
         return jsonify({'success': False, 'message': 'No analysis loaded'})
@@ -887,19 +877,16 @@ def api_browse_event():
     try:
         # Handle navigation actions on server side
         if action == 'N':  # Next event
-            mode = 'browse'  # Switch to browse mode when user navigates
             current_event_index += 1
             # Ensure index is valid after increment
             if current_event_index >= len(analyzer.timestamps):
                 current_event_index = len(analyzer.timestamps) - 1
         elif action == 'P':  # Previous event
-            mode = 'browse'  # Switch to browse mode when user navigates
             current_event_index -= 1
             # Ensure index is valid after decrement
             if current_event_index < 0:
                 current_event_index = 0
-        elif action == 'L':  # Latest mode activated
-            mode = 'monitor'  # Switch to monitor mode when latest is active
+        # Note: action 'L' (Latest) is handled by client via updateInterval
         
         # Ensure index is valid (for all actions)
         if current_event_index >= len(analyzer.timestamps):
@@ -938,7 +925,7 @@ def api_browse_event():
             return jsonify({'success': False, 'message': f'Unknown action: {action}'})
         
         # For N, P, and L actions, return success (frontend will call loadPlots separately)
-        return jsonify({'success': True, 'message': 'Action completed', 'event_index': current_event_index, 'mode': mode})
+        return jsonify({'success': True, 'message': 'Action completed', 'event_index': current_event_index})
     except Exception as e:
         logger.error(f"Error in browse event action: {e}")
         import traceback
@@ -949,7 +936,6 @@ if __name__ == '__main__':
     # Initialize database
     current_event_index = None
     current_match_distance = 500
-    mode = 'monitor'
     analyzer = PowerEventAnalyzer()
     analyzer.load_events()
     status = analyzer.get_status()

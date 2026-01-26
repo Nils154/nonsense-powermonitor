@@ -22,11 +22,11 @@ from sklearn.cluster import KMeans    #pip install scikit-learn
 from scipy.spatial.distance import cdist
 from datetime import datetime, timedelta
 import os
-import logging
 from database import PowerEventDatabase
 
-# Set up logger
-logger = logging.getLogger(__name__)
+# Set up logger (will be configured by importing module)
+from logging_config import get_logger
+logger = get_logger(__name__)
 
 EVENT_SIZE = 20 # and event is 20 samples (20 seconds)
 MIN_CLUSTERS = 3 #3
@@ -1712,20 +1712,7 @@ def interactive_cluster_labeling(analyzer, db=None):
 
 
 
-if __name__ == "__main__":
-    # Configure logging - only show messages from powerMonitor and poweranalyzer
-    logging.basicConfig(
-        level=logging.WARNING,  # Suppress INFO/DEBUG from third-party modules
-        format="%(message)s"
-    )
-    # Set specific loggers to INFO level
-    logging.getLogger('powerMonitor').setLevel(logging.INFO)
-    logging.getLogger('poweranalyzer').setLevel(logging.INFO)
-    # Also set for when run as script (__main__)
-    if __name__ == '__main__':
-        logging.getLogger('__main__').setLevel(logging.INFO)
-
-    
+if __name__ == "__main__":  
     print("🚀 Power Event Analysis with Smart Data Detection")
     print("=" * 60)
     analyzer = None

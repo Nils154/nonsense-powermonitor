@@ -9,19 +9,18 @@ nonsense_power_analyzer.py and saves it to an SQLite database.
 
 import sqlite3
 import os
-import time
-from datetime import datetime, timezone
-import logging
+from datetime import datetime
 import numpy as np
 
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Set up logging using centralized configuration
+from logging_config import setup_default_logging, get_logger
+setup_default_logging()
+logger = get_logger(__name__)
 
 # Database file name
 DB_FILE = './data/power_events.db'
 
-# EVENT_SIZE from powerAnalyzerv4.py
+# EVENT_SIZE from powerAnalyzer.py
 EVENT_SIZE = 20
 
 

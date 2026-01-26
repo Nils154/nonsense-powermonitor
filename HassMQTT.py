@@ -1,14 +1,14 @@
 import paho.mqtt.client as mqtt
 import signal
 import json
-import logging
 
 # MQTT settings
 import os
 from dotenv import load_dotenv
 
-# Set up logger
-logger = logging.getLogger(__name__)
+# Set up logger (will be configured by importing module)
+from logging_config import get_logger
+logger = get_logger(__name__)
 
 # Detect paho-mqtt version for compatibility
 # This code works with both paho-mqtt 1.6 and 2.1+
@@ -179,13 +179,9 @@ class HassMQTT:
 
 
 def main():
-    # Configure root logger
-    logging.basicConfig(
-        level=logging.INFO,
-        #level=logging.DEBUG,  # capture everything from DEBUG upwards
-        #format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-        format ="%(message)s"
-    )
+    # Configure logging using centralized configuration
+    from logging_config import setup_default_logging
+    setup_default_logging()
     import time
     print('demo of how this can work')
     topics = {}

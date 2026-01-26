@@ -519,14 +519,11 @@
     
     <script>
         let currentEventIndex = null; // Simple event number (0-based index)
-        let totalEvents = 0;
         let matchDistance = 500; // Remembered/global match distance
-        let latestModeActive = true; // Default to active
-        let updateInterval = null; // Store interval ID for auto updates
+        let updateInterval = null; // Store interval ID for auto updates (null = latest mode inactive, non-null = active)
         let selectedDeviceIdx = null; // Track currently selected device
         let currentClusterIndex = null; // Current cluster being labeled
         let totalClusters = 0; // Total number of clusters
-        let isLabelingMode = false; // Whether we're in cluster labeling mode
         
         function showMessage(text, type) {
             const messageDiv = document.getElementById('message');
@@ -693,19 +690,16 @@
                     histogramNew.src = 'data:image/png;base64,' + data.histogram;
                     
                     // Update event info immediately
-                    totalEvents = data.total_events;
                     matchDistance = data.match_distance;
                     
-                    // If Latest mode is active, always use the last event
-                    if (latestModeActive && totalEvents > 0) {
-                        currentEventIndex = totalEvents - 1;
-                    } else if (currentEventIndex === null) {
+                    // Initialize or validate currentEventIndex (checkForUpdates handles setting to latest)
+                    if (currentEventIndex === null) {
                         // Initialize to the event from server if not set
                         currentEventIndex = data.event_index;
                     } else {
                         // Use the current index, but ensure it's valid
-                        if (currentEventIndex >= totalEvents) {
-                            currentEventIndex = totalEvents - 1;
+                        if (currentEventIndex >= data.total_events) {
+                            currentEventIndex = data.total_events - 1;
                         }
                         if (currentEventIndex < 0) {
                             currentEventIndex = 0;
@@ -830,12 +824,7 @@
                 if (selectedDeviceIdx !== null) {
                     loadDevicePlots(selectedDeviceIdx, newDistance);
                 } else {
-                    // Ensure we reload plots for the current event index with new match distance
-                    if (currentEventIndex !== null) {
-                        loadPlots(true);  // true = send match_distance parameter, currentEventIndex is already set
-                    } else {
-                        loadPlots(true);  // loadPlots will handle if currentEventIndex is null
-                    }
+                    loadPlots(true);  // true = send match_distance parameter, currentEventIndex is already set
                 }
             } else {
                 // Reset to current value if invalid
@@ -911,11 +900,7 @@
             
             // Handle Latest locally (server handles P/N)
             if (action === 'L') {
-                // Latest: set to last event
-                if (totalEvents > 0) {
-                    currentEventIndex = totalEvents - 1;
-                    updateTimestampInput();
-                }
+                // loadPlots() will set to latest when updateInterval is not null
             }
             // Note: P (Previous) and N (Next) are handled on the server side
             
@@ -991,11 +976,7 @@
             }
             
             // Stop auto updates
-            if (updateInterval) {
-                clearInterval(updateInterval);
-                updateInterval = null;
-            }
-            latestModeActive = false;
+            stopUpdateInterval();
             
             // Clear the page content
             const container = document.querySelector('.container');
@@ -1007,7 +988,6 @@
                 if (data.success) {
                     totalClusters = data.n_clusters;
                     currentClusterIndex = 0;
-                    isLabelingMode = true;
                     // Show cluster labeling interface
                     showClusterLabelingInterface();
                     loadClusterPlots(0);
@@ -1029,11 +1009,7 @@
         
         async function analyzeUnlabeled() {
             // Stop auto updates
-            if (updateInterval) {
-                clearInterval(updateInterval);
-                updateInterval = null;
-            }
-            latestModeActive = false;
+            stopUpdateInterval();
             
             // Clear the page content
             const container = document.querySelector('.container');
@@ -1045,7 +1021,6 @@
                 if (data.success) {
                     totalClusters = data.n_clusters;
                     currentClusterIndex = 0;
-                    isLabelingMode = true;
                     // Show cluster labeling interface
                     showClusterLabelingInterface();
                     loadClusterPlots(0);
@@ -1441,38 +1416,39 @@
         }
         
         async function toggleLatest() {
-            latestModeActive = !latestModeActive;
             const btn = document.getElementById('latest-btn');
-            if (latestModeActive) {
+            if (updateInterval === null) {
+                // Enable latest mode
                 btn.classList.add('latest-active');
                 btn.textContent = 'Latest ⭐';
                 // When Latest is enabled, set to the last event and notify server
                 // Restore the remembered match distance
                 document.getElementById('match-distance-input').value = Math.round(matchDistance);
-                if (totalEvents > 0) {
-                    currentEventIndex = totalEvents - 1;
-                    updateTimestampInput();
-                    // Notify server to set mode to 'monitor'
-                    try {
-                        await fetch('/api/browse_event', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({
-                                action: 'L',
-                                event_index: currentEventIndex
-                            })
-                        });
-                    } catch (error) {
-                        console.error('Error setting monitor mode:', error);
-                    }
-                    loadPlots();
-                } else if (currentEventIndex === null) {
-                    // If totalEvents not yet loaded, loadPlots will handle it
-                    loadPlots();
+                // Notify server to set mode to 'monitor'
+                try {
+                    await fetch('/api/browse_event', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            action: 'L',
+                            event_index: currentEventIndex
+                        })
+                    });
+                } catch (error) {
+                    console.error('Error setting monitor mode:', error);
                 }
+                // Start the update interval when latest mode is enabled
+                startUpdateInterval();
+                // loadPlots() will initialize currentEventIndex, then checkForUpdates will set to latest
+                loadPlots();
+                // Trigger immediate check to set to latest (checkForUpdates handles setting to latest)
+                checkForUpdates();
             } else {
+                // Disable latest mode
                 btn.classList.remove('latest-active');
                 btn.textContent = 'Latest';
+                // Stop the update interval when latest mode is disabled
+                stopUpdateInterval();
             }
         }
         
@@ -1506,20 +1482,37 @@
             }
         }
         
+        function startUpdateInterval() {
+            // Clear any existing interval first
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+            // Start polling for updates every 20 seconds
+            updateInterval = setInterval(checkForUpdates, 20000);
+        }
+        
+        function stopUpdateInterval() {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+                updateInterval = null;
+            }
+        }
+        
         function disableLatestMode() {
-            if (latestModeActive) {
-                latestModeActive = false;
+            if (updateInterval !== null) {
                 const btn = document.getElementById('latest-btn');
                 btn.classList.remove('latest-active');
                 btn.textContent = 'Latest';
+                // Stop the update interval when latest mode is disabled
+                stopUpdateInterval();
             }
         }
         
         // Poll for data updates
         async function checkForUpdates() {
-            // Only check for updates if latest mode is active and not in labeling mode
-            if (!latestModeActive || isLabelingMode) {
-                return; // Exit early if latest mode is disabled or in labeling mode
+            // Only check for updates if latest mode is active
+            if (updateInterval === null) {
+                return; // Exit early if latest mode is disabled
             }
             
             try {
@@ -1527,50 +1520,51 @@
                 const data = await response.json();
                 
                 // Check again after async operation - state might have changed
-                if (!latestModeActive) {
+                if (updateInterval === null) {
                     return;
                 }
                 
                 if (data.success) {
-                    // Use totalEvents variable instead of parsing DOM text (which shows "0 to n-1" format)
-                    const currentEventCount = totalEvents;
-                    if (data.has_update || data.event_count !== currentEventCount) {
-                        // Final check before updating - state might have changed during async operations
-                        if (!latestModeActive) {
-                            return;
+                    // Final check before updating - state might have changed during async operations
+                    if (updateInterval === null) {
+                        return;
+                    }
+                    
+                    // Update event count in "0 to n-1" format
+                    if (data.event_count === 0) {
+                        document.getElementById('status-events').textContent = '0';
+                    } else {
+                        const maxIndex = data.event_count - 1;
+                        document.getElementById('status-events').textContent = `0 to ${maxIndex}`;
+                    }
+                    // Update device count if changed
+                    const currentDeviceCount = parseInt(document.getElementById('status-devices').textContent);
+                    // Update "Data Since" timestamp if provided
+                    if (data.first_event_timestamp) {
+                        // Convert ISO timestamp to local time with timezone
+                        const firstEventDate = new Date(data.first_event_timestamp);
+                        const formattedFirstEvent = formatTimestampWithTimezone(firstEventDate);
+                        document.getElementById('status-data-since').textContent = formattedFirstEvent;
+                    }
+                    
+                    // When latest mode is active, always ensure we're viewing the latest event
+                    if (data.event_count > 0) {
+                        const latestIndex = data.event_count - 1;
+                        // Only update if we're not already on the latest event
+                        if (currentEventIndex !== latestIndex) {
+                            currentEventIndex = latestIndex;
+                            updateTimestampInput();
+                            console.log(`🔄 Latest mode: Updating to event ${currentEventIndex} of ${data.event_count}`);
                         }
-                        
-                        // Update event count in "0 to n-1" format
-                        if (data.event_count === 0) {
-                            document.getElementById('status-events').textContent = '0';
-                        } else {
-                            const maxIndex = data.event_count - 1;
-                            document.getElementById('status-events').textContent = `0 to ${maxIndex}`;
-                        }
-                        // Update device count if changed
-                        const currentDeviceCount = parseInt(document.getElementById('status-devices').textContent);
-                        // Update "Data Since" timestamp if provided
-                        if (data.first_event_timestamp) {
-                            // Convert ISO timestamp to local time with timezone
-                            const firstEventDate = new Date(data.first_event_timestamp);
-                            const formattedFirstEvent = formatTimestampWithTimezone(firstEventDate);
-                            document.getElementById('status-data-since').textContent = formattedFirstEvent;
-                        }
+                    }
+                    
+                    // Check if there's an update or if device count changed
+                    if (data.has_update || data.device_count !== currentDeviceCount) {
                         if (data.device_count !== currentDeviceCount) {
                             // Reload page to get updated device list
                             window.location.reload();
                         } else {
                             // Just reload plots to show latest event
-                            // When Latest mode is active and has_update is true, update to the last event
-                            if (latestModeActive && data.has_update && data.event_count > 0) {
-                                // Update totalEvents and currentEventIndex to latest before loading plots
-                                totalEvents = data.event_count;
-                                currentEventIndex = data.event_count - 1;
-                                updateTimestampInput();
-                                console.log(`🔄 Latest mode: Updating to event ${currentEventIndex} of ${totalEvents}`);
-                            }
-                            // loadPlots() will use the updated currentEventIndex and will also ensure
-                            // it's set to latest if latestModeActive is still true
                             loadPlots();
                         }
                     }
@@ -1604,12 +1598,10 @@
                 const rows = table.querySelectorAll('tbody tr');
                 document.getElementById('status-devices').textContent = rows.length;
             }
-            // Initialize Latest button state
+            // Initialize Latest button state (default to active, so start interval)
             const latestBtn = document.getElementById('latest-btn');
-            if (latestModeActive) {
-                latestBtn.classList.add('latest-active');
-                latestBtn.textContent = 'Latest ⭐';
-            }
+            latestBtn.classList.add('latest-active');
+            latestBtn.textContent = 'Latest ⭐';
             // Set up match distance input handler
             const matchDistanceInput = document.getElementById('match-distance-input');
             matchDistanceInput.addEventListener('change', updateMatchDistance);
@@ -1622,11 +1614,18 @@
                 }
             });
             
-            // Load plots on page load
-            loadPlots();
+            // Start polling for updates (latest mode defaults to active on page load)
+            startUpdateInterval();
             
-            // Start polling for updates every 20 seconds
-            updateInterval = setInterval(checkForUpdates, 20000);
+            // Load plots on page load, then trigger checkForUpdates to set to latest
+            loadPlots();
+            // Trigger immediate check to set to latest (checkForUpdates handles setting to latest)
+            checkForUpdates();
+            
+            // Clean up interval on page unload
+            window.addEventListener('beforeunload', () => {
+                stopUpdateInterval();
+            });
         });
         
         // Device table sorting

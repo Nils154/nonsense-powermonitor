@@ -14,7 +14,6 @@ import time
 from datetime import datetime
 import numpy as np
 import os
-import logging
 from dotenv import load_dotenv
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning) # type: ignore
@@ -22,8 +21,9 @@ import poweranalyzer as pa
 from HassMQTT import HassMQTT
 from database import PowerEventDatabase
 
-# Set up logger
-logger = logging.getLogger(__name__)
+# Set up logger (will be configured in main())
+from logging_config import get_logger
+logger = get_logger(__name__)
 
 load_dotenv()
 
@@ -328,8 +328,7 @@ class PowerTracking:
         self.topic_names = ["baseline_power", "unknown_power"]
         self.baseline_power = 0
         self.power_sum = 0
-        self.power_count = 1
-        self.current_minutes = datetime.now().minute
+        self.power_count = 0
         
         # Add average_minimum_power topic to topics dictionary in hassmqtt
         mqtt_topic_prefix = "powermonitor"
@@ -361,21 +360,23 @@ class PowerTracking:
     def update(self, timestamp, activePower, currently_on):
         """
         Update minimum power tracking for the current hour.
-        
+        calculate unknown power and update database and MQTT
+        returns unknown power
+
         Args:
             timestamp: Unix timestamp
             activePower: Current active power value
         """
         hour = timestamp.hour
-        minutes = timestamp.minute
+        unknown_power = 0
         self.hourly_minimum = min(self.hourly_minimum, activePower)
 
-        # check if minutes has rolled over
-        if minutes != self.current_minutes:
+        # check if if we have collected at least 60 samples
+        # normally that is a minute, but if the power is very low, it may be more.
+        if self.power_count > 60:
             unknown_power = self.power_sum / self.power_count
             self.power_sum = 0
             self.power_count = 0
-            self.current_minutes = minutes
             for _device, (_scheduled_time, dev_avg_power) in currently_on.items():
                 unknown_power -= dev_avg_power
             if self.baseline_power is not None:
@@ -387,6 +388,7 @@ class PowerTracking:
             logger.debug(f"Unknown power: {unknown_power}")
         self.power_sum += activePower
         self.power_count += 1
+        logger.debug(f"Power count: {self.power_count}")
         # Check if hour has rolled over
         if hour != self.current_hour:
             # Hour rolled over, save previous hour's minimum
@@ -402,21 +404,17 @@ class PowerTracking:
             # Reset for new hour
             self.hourly_minimum = activePower
             self.current_hour = hour
-     
+        return unknown_power
+
+    def reset(self):
+        """
+        Reset the unknown power tracking after an event.
+        """
+        self.power_sum = 0
+        self.power_count = 0
+
              
 def main():
-    # Configure logging - only show messages from powerMonitor and poweranalyzer
-    # DEBUG, INFO, WARNING, ERROR, CRITICAL
-    logging.basicConfig(
-        level=logging.WARNING,  # Suppress INFO/DEBUG from third-party modules
-        format="%(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    # Set specific loggers to INFO level
-    logging.getLogger('powerMonitor').setLevel(logging.DEBUG)
-    logging.getLogger('poweranalyzer').setLevel(logging.DEBUG)
-    logging.getLogger('__main__').setLevel(logging.DEBUG)
-    
     # Initialize database connection
     db = PowerEventDatabase()
     # Initialize Enphase client
@@ -449,7 +447,7 @@ def main():
         if result is None:
             continue
         timeStamp,activePower = result 
-        #logger.debug(f'Consumption data: {activePower}')
+        logger.info(f'Consumption data: {activePower}')
         if sample>0: # we are in a collection loop
             power_array[sample] = activePower-lastActivePower
             sample += 1
@@ -459,6 +457,8 @@ def main():
                 sample = 0
                 lastActivePower = activePower
                 device_label, scheduled_time = analyzer.match(timeStamp, power_array, dev_avg_power, hassmqtt)
+                if device_label is not None:
+                    power_tracking.reset()
                 if device_label is not None and scheduled_time is not None:
                     currently_on[device_label] = (scheduled_time, dev_avg_power)
                 # Ensure event_timestamp is timezone-aware before saving
@@ -475,7 +475,6 @@ def main():
             sample = 1
         else:
             #not in a critical sample loop, update power tracking asynchronously
-            power_tracking.update(timeStamp, activePower, currently_on)
             # Check for queued off actions that are due
             completed_actions = []
             for device, (scheduled_time, _) in currently_on.items():
@@ -488,6 +487,20 @@ def main():
             # Remove processed actions from queue
             for device in completed_actions:
                 del currently_on[device]
+            # update unknown power
+            unknown_power = power_tracking.update(timeStamp, activePower, currently_on)
+            if unknown_power < 0 and len(currently_on) > 0:
+                # we have a negative unknown power, but devices are still on
+                # this is likely wrong, turn off a device
+                for device, (scheduled_time, avg_power) in currently_on.items():
+                    if abs(unknown_power/avg_power) > 0.9:
+                        # this device represent at least 90% of the unknown power
+                        # turn it off
+                        hassmqtt.update(device, "OFF", False)
+                        hassmqtt.update(f'{device}_power', 0, False)
+                        logger.info(f'Sent queued OFF action for {device}')
+                        del currently_on[device]
+                        break
             lastActivePower = activePower      
 
 
